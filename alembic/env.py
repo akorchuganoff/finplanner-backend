@@ -28,6 +28,7 @@ sys.path.append(os.path.dirname(os.path.dirname(__file__)))  # добавляе�
 
 from app.database.database import Base
 from app.models.user import User  # импортируем модель, чтобы Alembic её увидел
+from app.models.category import Category
 
 target_metadata = Base.metadata
 
