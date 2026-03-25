@@ -1,8 +1,27 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from app.routers import auth
 from app.database.database import engine, Base
-from app.models import user  # чтобы загрузить модели
+import app.models.user  # чтобы Alembic видел модель
 
 app = FastAPI(title="FinPlanner API")
+
+# Настройка CORS (разрешаем запросы с фронтенда)
+origins = [
+    "http://localhost:5173",  # Vite по умолчанию
+    "http://localhost:3000",  # альтернативный порт
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,  # обязательно для передачи cookies
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Подключаем роутеры
+app.include_router(auth.router)
 
 @app.get("/")
 def read_root():
