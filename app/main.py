@@ -2,8 +2,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routers import auth
 from app.routers import categories
+from app.routers import transactions
 from app.database.database import engine, Base
 import app.models.user  # чтобы Alembic видел модель
+import app.models.category  # чтобы Alembic видел модель
+import app.models.transaction
+
 
 app = FastAPI(title="FinPlanner API")
 
@@ -24,6 +28,7 @@ app.add_middleware(
 # Подключаем роутеры
 app.include_router(auth.router)
 app.include_router(categories.router)
+app.include_router(transactions.router)
 
 @app.get("/")
 def read_root():

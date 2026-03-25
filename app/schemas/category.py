@@ -1,11 +1,10 @@
 from pydantic import BaseModel, Field
 from datetime import datetime
 from typing import Optional
-from app.models.category import CategoryType
 
 class CategoryBase(BaseModel):
     name: str = Field(..., max_length=100)
-    type: CategoryType
+    category_type: str = Field(..., pattern='^(income|expense)$')  # новое поле
 
 class CategoryCreate(CategoryBase):
     pass

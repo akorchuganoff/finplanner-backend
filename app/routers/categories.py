@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from typing import List, Optional, Literal
 from app.database.database import get_db
-from app.models.category import Category, CategoryType
+from app.models.category import Category
 from app.schemas.category import CategoryCreate, CategoryUpdate, CategoryResponse
 from app.dependencies.auth import get_current_user
 from app.models.user import User
@@ -11,20 +11,20 @@ router = APIRouter(prefix="/api/categories", tags=["categories"])
 
 @router.get("/", response_model=List[CategoryResponse])
 def get_categories(
-    type: Optional[CategoryType] = None,
+    category_type: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
     Получить список категорий пользователя (системные + свои).
-    Если указан type, фильтруем по типу.
+    Если указан category_type, фильтруем по типу.
     """
     query = db.query(Category).filter(
         (Category.user_id == current_user.id) | (Category.user_id.is_(None))
     )
-    if type:
-        query = query.filter(Category.type == type)
-    categories = query.order_by(Category.type, Category.name).all()
+    if category_type:
+        query = query.filter(Category.category_type == category_type)
+    categories = query.order_by(Category.category_type, Category.name).all()
     return categories
 
 @router.post("/", response_model=CategoryResponse, status_code=status.HTTP_201_CREATED)
@@ -40,17 +40,17 @@ def create_category(
     existing = db.query(Category).filter(
         Category.user_id == current_user.id,
         Category.name == category_data.name,
-        Category.type == category_data.type
+        Category.category_type == category_data.category_type
     ).first()
     if existing:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Category with this name and type already exists for this user"
+            detail="Category with this name and category_type already exists for this user"
         )
 
     new_category = Category(
         name=category_data.name,
-        type=category_data.type,
+        category_type=category_data.category_type,
         user_id=current_user.id
     )
     db.add(new_category)
@@ -88,13 +88,13 @@ def update_category(
     if category_update.name and category_update.name != category.name:
         existing = db.query(Category).filter(
             Category.user_id == current_user.id,
-            Category.type == category.type,
+            Category.category_type == category.category_type,
             Category.name == category_update.name
         ).first()
         if existing:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Category with this name and type already exists for this user"
+                detail="Category with this name and category_type already exists for this user"
             )
         category.name = category_update.name
 

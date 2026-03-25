@@ -3,7 +3,7 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.database.database import SessionLocal
-from app.models import Category, CategoryType 
+from app.models import Category
 
 def seed_system_categories():
     db = SessionLocal()
@@ -11,22 +11,22 @@ def seed_system_categories():
         # Список системных категорий
         system_categories = [
             # Доходы
-            ("Зарплата", CategoryType.income),
-            ("Фриланс", CategoryType.income),
-            ("Инвестиционный доход", CategoryType.income),
-            ("Подарки", CategoryType.income),
-            ("Прочее", CategoryType.income),
+            ("Зарплата", "income"),
+            ("Фриланс", "income"),
+            ("Инвестиционный доход", "income"),
+            ("Подарки", "income"),
+            ("Прочее", "income"),
             # Расходы
-            ("Продукты", CategoryType.expense),
-            ("Транспорт", CategoryType.expense),
-            ("Рестораны", CategoryType.expense),
-            ("Развлечения", CategoryType.expense),
-            ("Одежда", CategoryType.expense),
-            ("Здоровье", CategoryType.expense),
-            ("Образование", CategoryType.expense),
-            ("Коммунальные платежи", CategoryType.expense),
-            ("Связь", CategoryType.expense),
-            ("Прочее", CategoryType.expense),
+            ("Продукты", "expense"),
+            ("Транспорт", "expense"),
+            ("Рестораны", "expense"),
+            ("Развлечения", "expense"),
+            ("Одежда", "expense"),
+            ("Здоровье", "expense"),
+            ("Образование", "expense"),
+            ("Коммунальные платежи", "expense"),
+            ("Связь", "expense"),
+            ("Прочее", "expense"),
         ]
 
         # Проверяем, есть ли уже какие-либо системные категории
@@ -36,7 +36,7 @@ def seed_system_categories():
             return
 
         for name, cat_type in system_categories:
-            category = Category(name=name, type=cat_type, user_id=None)
+            category = Category(name=name, category_type=cat_type, user_id=None)
             db.add(category)
 
         db.commit()
