@@ -8,6 +8,8 @@ from app.import_utils.categorizer import suggest_category
 from app.models.category import Category
 from app.models.transaction import Transaction
 
+import time 
+
 from typing import List
 
 router = APIRouter(prefix="/api/import", tags=["import"])
@@ -18,11 +20,15 @@ async def import_bank_statement(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    
+    start_total = time.time()
+
     # Сохраняем файл временно
     file_path = f"/tmp/{file.filename}"
     with open(file_path, "wb") as f:
         f.write(await file.read())
     
+    start = time.time()
     # Определяем банк по имени файла или содержимому
     if "сбер" in file.filename.lower() or "sber" in file.filename.lower():
         print("SBER")
@@ -33,6 +39,16 @@ async def import_bank_statement(
     else:
         raise HTTPException(400, "Неизвестный формат выписки")
 
+    print(f"Парсинг PDF: {time.time()-start:.2f} сек, транзакций: {len(raw_transactions)}")
+
+    start = time.time()
+
+    user_categories_map = {}
+    db_categories = db.query(Category).filter(
+        (Category.user_id == current_user.id) | (Category.user_id.is_(None))
+    ).all()
+    for cat in db_categories:
+        user_categories_map[(cat.name, cat.category_type)] = cat.id
 
 
     # Для каждой транзакции подбираем категорию
@@ -41,22 +57,15 @@ async def import_bank_statement(
         cat_name, cat_type = suggest_category(
             tx['description'], tx['amount'], tx['type'], tx.get('bank_category')
         )
-        category_id = None
-        if cat_name:
-            # Ищем существующую категорию пользователя или системную
-            category = db.query(Category).filter(
-                Category.name == cat_name,
-                Category.category_type == cat_type,
-                (Category.user_id == current_user.id) | (Category.user_id.is_(None))
-            ).first()
-            if category:
-                category_id = category.id
+        category_id = user_categories_map.get((cat_name, cat_type), None)
         suggested.append({
             **tx,
             'suggested_category_id': category_id,
             'suggested_category_name': cat_name,
         })
     
+    print(f"Категоризация {len(raw_transactions)} транзакций: {time.time()-start:.2f} сек")
+
     return {"transactions": suggested, "total": len(suggested)}
 
 
@@ -75,8 +84,8 @@ def confirm_import(
         new_tx = Transaction(
             amount=tx_data['amount'],
             transaction_type=tx_data['type'],
-            date=tx_data['date'],
-            comment=tx_data.get('comment', ''),
+            date=tx_data['date']    ,
+            comment=tx_data.get('description', ''),
             user_id=current_user.id,
             category_id=category_id,
         )

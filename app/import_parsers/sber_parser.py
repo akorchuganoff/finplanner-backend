@@ -1,84 +1,70 @@
-import pdfplumber
+import fitz  # PyMuPDF
 import re
 from datetime import datetime
 from decimal import Decimal
 
 def parse_sber_pdf(file_path):
+    date_pattern = re.compile(r'^(\d{2}\.\d{2}\.\d{4})')
+    time_pattern = re.compile(r'^(\d{2}:\d{2})')
+    star_pattern = re.compile(r'\*\*\*\*')
     transactions = []
 
-    rows = []
-    with pdfplumber.open(file_path, repair=True) as pdf:
-        all_text = ''
-        for page in pdf.pages:
-            text = page.extract_text()
+    doc = fitz.open(file_path)
+    full_text = []
+    for page in doc:
+        text = page.get_text()
+        full_text.append(text)
+    doc.close()
 
-            all_text += text + "\n"
-        
-        rows += all_text.split('\n')
-    
+    all_text = '\n'.join(full_text)
+    lines = all_text.split('\n')
 
-
-    # Оставляем только транзакции
-    transactions = []
-    current_transaction_data = []
-
-    for row in rows:
-        print(row)
-
-        if "****" in row:
-            current_transaction_data.append(row)
-            transactions.append(current_transaction_data)
-            current_transaction_data = []
-        elif bool(re.match(r'^(?:\d{2}\.\d{2}\.\d{4})', row)):
-            current_transaction_data.append(row)
-        else:
-            current_transaction_data = []
-
-    print(transactions)
-
-    parsed_transactions = []
-    for row in transactions:
-        l1 = row[0]
-        if len(row)==3:
-            l2 = row[1]+row[2]
-        else:
-            l2 = row[1]
-
-        data = l1.split(" ")
-        date = datetime.strptime(data[0], '%d.%m.%Y').date()
-
-        time = data[1]
-
-        ostatok = " ".join(data[2:])
-        
-        i = 0
-
-        while ostatok[i] not in '+0123456789':
+    i = 0
+    while i < len(lines):
+        line = lines[i].strip()
+        if not line:
             i += 1
-        bank_category = ostatok[:i]
+            continue
 
-        amount_index = i
-        while ostatok[i] != ',':
+        if date_pattern.match(line) and time_pattern.match(lines[i+1].strip()):
+            transaction_lines = [line]
             i += 1
-        amount_str = ostatok[amount_index:i+2].replace(',', '.').replace(' ','')
+            while i < len(lines):
+                next_line = lines[i].strip()
+                if not next_line:
+                    i += 1
+                    continue
+                transaction_lines.append(next_line)
+                if star_pattern.search(next_line):
+                    i += 1
+                    break
+                i += 1
 
-        if amount_str[0].startswith('+'):
-            ttype='income'
-            amount=Decimal(amount_str)
+            if i >= len(lines):
+                continue
+            print(transaction_lines)
+
+            date_str = transaction_lines[0]
+            date_obj = datetime.strptime(date_str, '%d.%m.%Y').date()
+            bank_category = transaction_lines[2]
+            amount_str = transaction_lines[3].replace("\xa0", '').replace(" ", '').replace(',', '.')
+            if amount_str.startswith('+'):
+                ttype = 'income'
+                amount = Decimal(amount_str[1:])
+            else:
+                ttype = 'expense'
+                amount = Decimal(amount_str)
+
+            description = transaction_lines[-1]
+
+            transactions.append({
+                'date': date_obj,
+                'amount': amount,
+                'type': ttype,
+                'description': description,
+                'bank_category': bank_category
+            })
         else:
-            ttype='expense'
-            amount=Decimal("-"+amount_str)
+            i += 1
 
-        l2_data = l2.split(' ')
-        transaction_code = l2_data[1]
-        description = " ".join(l2_data[2:])
-
-        parsed_transactions.append({
-            'date': date,
-            'amount': amount,
-            'type': ttype,
-            'description': description,
-            'bank_category': bank_category
-        })
-
-    return parsed_transactions
+    return transactions
