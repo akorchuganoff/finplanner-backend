@@ -1,0 +1,2 @@
+from app.import_parsers.sber_parser import parse_sber_pdf
+from app.import_parsers.tbank_parser import parse_tbank_pdf
