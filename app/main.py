@@ -4,6 +4,8 @@ from app.routers import auth
 from app.routers import categories
 from app.routers import transactions
 from app.routers import import_data
+from app.routers import ai_chat
+from app.routers import ai_advice
 from app.database.database import engine, Base
 import app.models.user  # чтобы Alembic видел модель
 import app.models.category  # чтобы Alembic видел модель
@@ -31,6 +33,8 @@ app.include_router(auth.router)
 app.include_router(categories.router)
 app.include_router(transactions.router)
 app.include_router(import_data.router)
+app.include_router(ai_chat.router)
+app.include_router(ai_advice.router)
 
 @app.get("/")
 def read_root():
