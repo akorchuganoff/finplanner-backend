@@ -2,6 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, func, case, extract
 from decimal import Decimal
+from app.services.transaction_service import create_transaction_if_not_exists
+from app.services.transaction_service import update_transaction_if_no_conflict
 from app.database.database import get_db
 from app.models.transaction import Transaction
 from app.models.category import Category
@@ -259,15 +261,23 @@ def create_transaction(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Transaction type must match category type"
         )
-
-    new_transaction = Transaction(
-        **transaction_data.model_dump(),
-        user_id=current_user.id
+    
+    new_tx = create_transaction_if_not_exists(
+        db=db,
+        user_id=current_user.id,
+        category_id=transaction_data.category_id,
+        amount=transaction_data.amount,
+        transaction_type=transaction_data.transaction_type,
+        date=transaction_data.date,
+        comment=transaction_data.comment or ""
     )
-    db.add(new_transaction)
+    if not new_tx:
+        raise HTTPException(status_code=409, detail="Transaction already exists")
+
+
     db.commit()
-    db.refresh(new_transaction)
-    return new_transaction
+    db.refresh(new_tx)
+    return new_tx
 
 @router.get("/{transaction_id}", response_model=TransactionResponse)
 def get_transaction(
@@ -317,10 +327,19 @@ def update_transaction(
             )
         transaction.category_id = transaction_data.category_id
 
-    # Обновляем другие поля, если они переданы
     update_data = transaction_data.model_dump(exclude_unset=True, exclude={"category_id"})
-    for field, value in update_data.items():
-        setattr(transaction, field, value)
+    updated = update_transaction_if_no_conflict(
+        db=db,
+        transaction=transaction,
+        user_id=current_user.id,
+        new_amount=update_data.get('amount'),
+        new_type=update_data.get('transaction_type'),
+        new_date=update_data.get('date'),
+        new_comment=update_data.get('comment')
+    )
+    if updated is None:
+        raise HTTPException(status_code=409, detail="Transaction already exists (duplicate based on date, amount, type, comment)")
+
 
     db.commit()
     db.refresh(transaction)

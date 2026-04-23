@@ -55,7 +55,10 @@ def parse_sber_pdf(file_path):
                 ttype = 'expense'
                 amount = Decimal(amount_str)
 
-            description = transaction_lines[-1]
+            j = len(transaction_lines)-1
+            while len(transaction_lines[j]) != 6:
+                j-=1
+            description = " ".join(transaction_lines[j+1:])
 
             transactions.append({
                 'date': date_obj,

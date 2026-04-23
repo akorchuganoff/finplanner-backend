@@ -4,11 +4,13 @@ from app.database.database import get_db
 from app.dependencies.auth import get_current_user
 from app.models.user import User
 from app.import_parsers import parse_sber_pdf, parse_tbank_pdf
-from app.import_utils.categorizer import suggest_category
+from app.utils.categorizer import suggest_category
+from app.utils.hash import generate_transaction_hash 
+from app.services.transaction_service import create_transaction_if_not_exists
 from app.models.category import Category
 from app.models.transaction import Transaction
 
-import time 
+from datetime import datetime
 
 from typing import List
 
@@ -20,15 +22,12 @@ async def import_bank_statement(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    
-    start_total = time.time()
 
     # Сохраняем файл временно
     file_path = f"/tmp/{file.filename}"
     with open(file_path, "wb") as f:
         f.write(await file.read())
     
-    start = time.time()
     # Определяем банк по имени файла или содержимому
     if "сбер" in file.filename.lower() or "sber" in file.filename.lower():
         print("SBER")
@@ -38,10 +37,6 @@ async def import_bank_statement(
         print("TBANK")
     else:
         raise HTTPException(400, "Неизвестный формат выписки")
-
-    print(f"Парсинг PDF: {time.time()-start:.2f} сек, транзакций: {len(raw_transactions)}")
-
-    start = time.time()
 
     user_categories_map = {}
     db_categories = db.query(Category).filter(
@@ -58,13 +53,26 @@ async def import_bank_statement(
             tx['description'], tx['amount'], tx['type'], tx.get('bank_category')
         )
         category_id = user_categories_map.get((cat_name, cat_type), None)
+        
+        tx_hash = generate_transaction_hash(
+            user_id=current_user.id,
+            date=tx['date'],
+            amount=tx['amount'],
+            transaction_type=tx['type'],
+            description=tx['description']
+        )
+        existing_tx = db.query(Transaction).filter(
+            Transaction.user_id == current_user.id,
+            Transaction.unique_hash == tx_hash
+        ).first()
+        is_duplicate = existing_tx is not None
+        
         suggested.append({
             **tx,
             'suggested_category_id': category_id,
             'suggested_category_name': cat_name,
+            'is_duplicate': is_duplicate,
         })
-    
-    print(f"Категоризация {len(raw_transactions)} транзакций: {time.time()-start:.2f} сек")
 
     return {"transactions": suggested, "total": len(suggested)}
 
@@ -75,21 +83,25 @@ def confirm_import(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    duplicates_amount = 0
     created = []
     for tx_data in transactions_data:
         # В данных обязательно должен быть category_id (пользователь мог исправить)
         category_id = tx_data.get('category_id')
         if not category_id:
             continue
-        new_tx = Transaction(
-            amount=tx_data['amount'],
-            transaction_type=tx_data['type'],
-            date=tx_data['date']    ,
-            comment=tx_data.get('description', ''),
+        new_tx = create_transaction_if_not_exists(
+            db=db,
             user_id=current_user.id,
             category_id=category_id,
+            amount=tx_data['amount'],
+            transaction_type=tx_data['type'],
+            date=datetime.strptime(tx_data['date'], "%Y-%m-%d"),
+            comment=tx_data.get('description', '')
         )
-        db.add(new_tx)
-        created.append(new_tx)
+        if new_tx:
+            created.append(new_tx)
+        else:
+            duplicates_amount += 1
     db.commit()
-    return {"imported": len(created)}
+    return {"imported": len(created), "duplicates": duplicates_amount, "transactions": created}
